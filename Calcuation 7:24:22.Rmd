@@ -1,0 +1,284 @@
+---
+title: "Cyclistic Capstone July R to Git"
+author: "Raj Srinivasan"
+date: "2022-07-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# install packages
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+```
+
+#use working directory
+
+```{r}
+getwd()
+
+```
+
+## Overview
+
+This report is a part of the "[Google Data Analytics Professional Certificate's](https://www.coursera.org/professional-certificates/google-data-analytics?utm_source=gg&utm_medium=sem&utm_campaign=15-GoogleDataAnalytics-ROW&utm_content=15-GoogleDataAnalytics-ROW&campaignid=12566515400&adgroupid=117869292685&device=c&keyword=google%20data%20analytics%20professional%20certificate&matchtype=p&network=g&devicemodel=&adpostion=&creativeid=507290840624&hide_mobile_promo&gclid=Cj0KCQjwlOmLBhCHARIsAGiJg7nCDJoKyJBvSNg_ZxabdVBTbqVrKCXJUKI_nAEzpv0AmrXkmcYWZ9kaAqIPEALw_wcB)" capstone project offered by [Coursera](https://www.coursera.org/).
+
+In this report, the chosen case study is the first problem in track#1, also known as '**Cyclistic**,' an imaginary bike-sharing company in Chicago. The company offers both traditional and assistive bikes to both casual riders and riders who are annual members.
+
+### The quoted scenario provided by the course:
+
+"You are a junior data analyst working in the marketing analyst team at Cyclistic, a bike-share company in Chicago. The director of marketing believes the company's future success depends on maximizing the number of annual memberships. Therefore, your team wants to understand how casual riders and annual members use Cyclistic bikes differently. From these insights, your team will design a new marketing strategy to convert casual riders into annual members. But first, Cyclistic executives must approve your recommendations, so they must be backed up with compelling data insights and professional data visualizations."
+
+## 1. "Ask"
+
+The questions that the stakeholders want answer in this scenario are:
+
+1.  How do annual members and casual riders use Cyclistic bikes differently?
+2.  Why would casual riders buy Cyclistic annual memberships?
+3.  How can Cyclistic use digital media to influence casual riders to become members?
+
+From these questions, the priority-1 task in this project is to identify the differences of bike usage between annual members and casual riders. Then, use those differences to figure out how to keep the existing and attract new annual members to maximize Cyclistic's profit.
+
+## 2. Collect and Prepare data
+
+# will use May 2021 to April 2022 data
+
+```{r}
+m5_2021<-read_csv("202105-divvy-tripdata.csv")
+m6_2021<-read_csv("202106-divvy-tripdata.csv")
+m7_2021<-read_csv("202107-divvy-tripdata.csv")
+m8_2021<-read_csv("202108-divvy-tripdata.csv")
+m9_2021<-read_csv("202109-divvy-tripdata.csv")
+m10_2021<-read_csv("202110-divvy-tripdata.csv")
+m11_2021<-read_csv("202111-divvy-tripdata.csv")
+m12_2021<-read_csv("202112-divvy-tripdata.csv")
+m1_2022<-read_csv("202201-divvy-tripdata.csv")
+m2_2022<-read_csv("202202-divvy-tripdata.csv")
+m3_2022<-read_csv("202203-divvy-tripdata.csv")
+m4_2022<-read_csv("202204-divvy-tripdata.csv")
+```
+
+# WRANGLE DATA AND COMBINE INTO A SINGLE FILE
+
+```{r}
+colnames(m5_2021)
+colnames(m6_2021)
+colnames(m7_2021)
+colnames(m8_2021)
+colnames(m9_2021)
+colnames(m10_2021)
+colnames(m11_2021)
+colnames(m12_2021)
+colnames(m1_2022)
+colnames(m2_2022)
+colnames(m3_2022)
+colnames(m4_2022)
+```
+
+# column names are same since Q1 2020 so no need to fix this further
+
+# inspect the dataframes to look for incongurencies
+
+```{r}
+str(m5_2021)
+str(m6_2021)
+str(m7_2021)
+str(m8_2021)
+str(m9_2021)
+str(m10_2021)
+str(m11_2021)
+str(m12_2021)
+str(m1_2022)
+str(m2_2022)
+str(m3_2022)
+str(m4_2022)
+```
+
+#Since 12 data haves same colomn name and same data frame, we can stack data frames into one big data frame
+
+```{r}
+all_trips <- bind_rows(m5_2021,m6_2021,m7_2021,m8_2021,m9_2021,m10_2021,m11_2021,m12_2021,m1_2022,m2_2022,m3_2022,m4_2022)
+```
+
+# Remove lat --- long, on this data, as this data was dropped beginning in 2020
+
+```{r}
+all_trips <- all_trips %>%  
+  select(-c(start_lat, start_lng, end_lat, end_lng))
+```
+
+### STEP 3: CLEAN UP AND ADD DATA TO PREPARE FOR ANALYSIS
+
+# Inspect the new table that has been created
+
+```{r}
+colnames(all_trips)  #List of column names
+nrow(all_trips)  #How many rows are in data frame?
+dim(all_trips)  #Dimensions of the data frame?
+head(all_trips)  #See the first 6 rows of data frame.  Also tail(all_trips)
+str(all_trips)  #See list of columns and data types (numeric, character, etc)
+summary(all_trips)  #Statistical summary of data. Mainly for numerics
+```
+
+# There are a few problems we will need to fix:
+
+# (1) In the "member_casual" column, there are two names for members ("member" and "Subscriber") and two names for casual riders ("Customer" and "casual"). We will need to consolidate that from four to two labels.
+
+# (2) The data can only be aggregated at the ride-level, which is too granular. We will want to add some additional columns of data -- such as day, month, year -- that provide additional opportunities to aggregate the data.
+
+# (3) We will want to add a calculated field for length of ride since the 2020Q1 data did not have the "tripduration" column. We will add "ride_length" to the entire dataframe for consistency.
+
+# (4) There are some rides where tripduration shows up as negative, including several hundred rides where Divvy took bikes out of circulation for Quality Control reasons. We will want to delete these rides.
+
+# In the "member_casual" column, replace "Subscriber" with "member" and "Customer" with "casual"
+
+# Before 2020, Divvy used different labels for these two types of riders ... we will want to make our dataframe consistent with their current nomenclature
+
+# N.B.: "Level" is a special property of a column that is retained even if a subset does not contain any values from a specific level
+
+# Begin by seeing how many observations fall under each usertype
+
+```{r}
+table(all_trips$member_casual)
+```
+
+# Add columns that list the date, month, day, and year of each ride
+
+# This will allow us to aggregate ride data for each month, day, or year ... before completing these operations we could only aggregate at the ride level
+
+# <https://www.statmethods.net/input/dates.html> more on date formats in R found at that link
+
+```{r}
+all_trips$date <- as.Date(all_trips$started_at) #The default format is yyyy-mm-dd
+all_trips$month <- format(as.Date(all_trips$date), "%m")
+all_trips$day <- format(as.Date(all_trips$date), "%d")
+all_trips$year <- format(as.Date(all_trips$date), "%Y")
+all_trips$day_of_week <- format(as.Date(all_trips$date), "%A")
+```
+
+# Add a "ride_length" calculation to all_trips (in seconds)
+
+# <https://stat.ethz.ch/R-manual/R-devel/library/base/html/difftime.html>
+
+```{r}
+all_trips$ride_length <- difftime(all_trips$ended_at,all_trips$started_at)
+```
+
+# Inspect the structure of the columns
+
+```{r}
+str(all_trips)
+```
+
+# Convert "ride_length" from Factor to numeric so we can run calculations on the data
+
+```{r}
+is.factor(all_trips$ride_length)
+all_trips$ride_length <- as.numeric(as.character(all_trips$ride_length))
+is.numeric(all_trips$ride_length)
+```
+
+# Remove "bad" data
+
+# The dataframe includes a few hundred entries when bikes were taken out of docks and checked for quality by Divvy or ride_length was negative
+
+# We will create a new version of the dataframe (v2) since data is being removed
+
+# <https://www.datasciencemadesimple.com/delete-or-drop-rows-in-r-with-conditions-2/>
+
+```{r}
+all_trips_v2 <- all_trips[!(all_trips$start_station_name == "HQ QR" | all_trips$ride_length<0),]
+```
+
+# STEP 4: CONDUCT DESCRIPTIVE ANALYSIS
+
+#===================================== \# Descriptive analysis on ride_length (all figures in seconds)
+
+```{r}
+mean(all_trips_v2$ride_length) #straight average (total ride length / rides)
+median(all_trips_v2$ride_length) #midpoint number in the ascending array of ride lengths
+max(all_trips_v2$ride_length) #longest ride
+min(all_trips_v2$ride_length) #shortest ride
+```
+
+# You can condense the four lines above to one line using summary() on the specific attribute
+
+```{r}
+summary(all_trips_v2$ride_length)
+```
+
+# Compare members and casual users
+
+```{r}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = mean)
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = median)
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = max)
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual, FUN = min)
+```
+
+# See the average ride time by each day for members vs casual users
+
+```{r}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+```
+
+# Notice that the days of the week are out of order. Let's fix that.
+
+```{r}
+all_trips_v2$day_of_week <- ordered(all_trips_v2$day_of_week, levels=c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"))
+```
+
+# Now, let's run the average ride time by each day for members vs casual users
+
+```{r}
+aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+```
+
+# analyze ridership data by type and weekday
+
+```{r}
+all_trips_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>%  #creates weekday field using wday()
+  group_by(member_casual, weekday) %>%  #groups by usertype and weekday
+  summarise(number_of_rides = n()							#calculates the number of rides and average duration 
+  ,average_duration = mean(ride_length)) %>% 		# calculates the average duration
+  arrange(member_casual, weekday)								# sorts
+```
+
+# Let's visualize the number of rides by rider type
+
+```{r}
+all_trips_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, weekday)  %>% 
+  ggplot(aes(x = weekday, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge")
+```
+
+# Let's create a visualization for average duration
+
+```{r}
+all_trips_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>% 
+  group_by(member_casual, weekday) %>% 
+  summarise(number_of_rides = n()
+            ,average_duration = mean(ride_length)) %>% 
+  arrange(member_casual, weekday)  %>% 
+  ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge")
+```
+
+# STEP 5: EXPORT SUMMARY FILE FOR FURTHER ANALYSIS
+
+```{r}
+counts <- aggregate(all_trips_v2$ride_length ~ all_trips_v2$member_casual + all_trips_v2$day_of_week, FUN = mean)
+write.csv(counts, file = '/Users/anitaraj/Desktop/RS/Coursera/1yearcyclistdata/avg_ride_length.csv')
+```
